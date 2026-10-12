@@ -112,8 +112,15 @@ class MarketFeed:
         """Return a snapshot for ``symbol``, or raise if data is unusable."""
         instrument = self.instrument(symbol)
         ticker = yahoo_symbol(symbol)
-        frame = self._feed.history(ticker, interval=self.interval, range_=self.range_,
-                                   max_age_minutes=25 if use_cache else 0)
+        # The cache window must match the bar. A fixed 25 minutes meant a 60s
+        # cycle at 1m refetched ~126,000 bars/minute across the universe, which
+        # a free data endpoint rate-limits -- the engine then hangs mid-cycle
+        # and the dashboard reports a stuck 'starting'. Keying freshness to the
+        # interval means data is only refreshed once a NEW bar has completed.
+        frame = self._feed.history(
+            ticker, interval=self.interval, range_=self.range_,
+            max_age_minutes=None if use_cache else 0,
+        )
         if frame is None or frame.empty:
             raise ValueError(f"no bars for {symbol} (ticker {ticker})")
         if bars and len(frame) > bars:

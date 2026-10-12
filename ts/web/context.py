@@ -26,8 +26,15 @@ from ts.web.server import AppContext
 
 
 def build_context(state: StateStore, symbols: list[str], interval: str,
-                  range_: str, host: str, port: int, open_browser: bool):
-    """Create the AppContext with a live engine factory attached."""
+                  range_: str, host: str, port: int, open_browser: bool,
+                  config: dict | None = None):
+    """Create the AppContext with a live engine factory attached.
+
+    ``config`` tunes the human-in-the-loop layer: the auto-approval thresholds,
+    how long a prompt waits for an answer, and whether execution starts in
+    dry-run. Everything has a safe default.
+    """
+    config = dict(config or {})
     feed = YahooFeed(cache_dir=str(ROOT / "data"))
 
     def fetcher(symbol, range_arg, interval_arg):

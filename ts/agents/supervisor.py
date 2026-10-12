@@ -106,8 +106,15 @@ class MultiAgentSupervisor:
     # ------------------------------------------------------------- lifecycle
 
     def setup(self) -> None:
+        """Subscribe every agent and mark it running.
+
+        ``Agent.start()`` sets the status flag the dashboard renders; without it
+        the Agents tab shows IDLE for agents that are actively cycling, which
+        reads as "the system is broken" when it is not.
+        """
         for agent in self.agents:
             agent.subscribe_all()
+            agent.start()
         self.bus.subscribe(Topic.LOG, self._on_log, name="supervisor.log")
         self.bus.subscribe(Topic.RISK, self._on_risk, name="supervisor.risk")
         self.bus.publish(Topic.AGENT_STATUS, {

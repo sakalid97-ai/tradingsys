@@ -249,12 +249,22 @@ class DashboardServer:
         engine = self.ctx.engine
         if engine is None:
             engine = self.ctx.agents or self._live_engine
-        running = bool(getattr(engine, "running", False)) or bool(
-            getattr(self.ctx.agents, "cycles", 0) and getattr(self.ctx.agents, "_thread", None)
-            and self.ctx.agents._thread.is_alive())
+        # "Running" means the worker thread is alive, NOT that it has finished a
+        # cycle. `cycles` is only incremented at the END of a cycle, and the
+        # first one spends 5-20s fetching the universe -- so keying the status
+        # on it reported STOPPED while the engine was mid-flight.
+        agents = self.ctx.agents
+        thread = getattr(agents, "_thread", None)
+        supervisor_alive = bool(thread is not None and thread.is_alive())
+        running = bool(getattr(engine, "running", False)) or supervisor_alive
+
         mode = str(getattr(engine, "mode", "IDLE")) if engine else "IDLE"
-        if self.ctx.agents is not None and getattr(self.ctx.agents, "cycles", 0) > 0:
-            mode = "AGENTS-DRYRUN" if self.ctx.agents.cfg.dry_run else "AGENTS-LIVE"
+        if agents is not None:
+            mode = ("AGENTS-DRYRUN" if agents.cfg.dry_run else "AGENTS-LIVE") \
+                if supervisor_alive else "IDLE"
+            if supervisor_alive and not getattr(agents, "cycles", 0):
+                # alive but mid-first-cycle: say so rather than implying IDLE
+                mode = mode + " (starting)"
         return {
             "ok": True,
             "version": self.ctx.version,
