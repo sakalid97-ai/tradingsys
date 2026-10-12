@@ -1034,6 +1034,42 @@ class DashboardServer:
                 except _CLIENT_GONE:
                     self.close_connection = True
 
+            def stream(self) -> None:
+                """Server-Sent Events: push the snapshot whenever it changes.
+
+                Lives on the request handler because that is where send_response
+                and wfile exist -- putting it on DashboardServer raises
+                AttributeError. Tailing the state file means the UI updates on
+                the engine's cadence, not the browser's poll interval.
+                """
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Connection", "keep-alive")
+                    self.end_headers()
+
+                    state_root = Path(server.ctx.state.root)
+                    snapshot = state_root / "snapshot.json"
+                    last_mtime = None
+                    last_payload = ""
+                    while True:
+                        try:
+                            mtime = snapshot.stat().st_mtime if snapshot.exists() else None
+                            if mtime and mtime != last_mtime:
+                                last_mtime = mtime
+                                payload = dumps({"type": "snapshot",
+                                                "data": server.ctx.state.read_snapshot()})
+                                if payload != last_payload:
+                                    last_payload = payload
+                                    self.wfile.write(("data: " + payload + "\n\n").encode())
+                                    self.wfile.flush()
+                            time.sleep(1.0)
+                        except Exception:  # noqa: BLE001 - client disconnected
+                            break
+                except Exception:  # noqa: BLE001 - client disconnected
+                    pass
+
             def do_GET(self) -> None:  # noqa: N802
                 parsed = urlparse(self.path)
                 path = parsed.path
@@ -1041,6 +1077,9 @@ class DashboardServer:
                 try:
                     if path in ("/", "/index.html"):
                         self._send_file(STATIC_DIR / "index.html")
+                        return
+                    if path == "/api/stream":
+                        self.stream()
                         return
                     if path.startswith("/static/"):
                         target = (STATIC_DIR / path[len("/static/"):]).resolve()

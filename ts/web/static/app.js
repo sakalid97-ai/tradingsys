@@ -1060,6 +1060,61 @@ function bindDataSourceUI() {
   });
 }
 
+
+/* ============================================================
+   LIVE STREAM - server-sent events so the UI pushes rather than polls
+   ============================================================ */
+
+function connectStream() {
+  if (typeof EventSource === "undefined") return;   // old browser: poller covers it
+  try {
+    const source = new EventSource("/api/stream");
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === "snapshot" && payload.data) {
+          applyLiveUpdate(payload.data);
+        }
+      } catch (err) {
+        /* malformed frame: the poller resyncs */
+      }
+    };
+  } catch (err) {
+    /* SSE unavailable: the 1s poller is the fallback */
+  }
+}
+
+function applyLiveUpdate(snap) {
+  if (!snap) return;
+  updateTickerFromSnapshot(snap);
+  updateStatusBarFromSnapshot(snap);
+  const active = document.querySelector(".nav-item.active");
+  const view = active ? active.dataset.view : "overview";
+  if (view === "overview" && typeof renderOverview === "function") renderOverview(snap, lastMetrics);
+  if (view === "positions" && typeof renderPositions === "function") renderPositions(snap.positions || []);
+}
+
+function updateTickerFromSnapshot(snap) {
+  const track = document.getElementById("ticker-track");
+  if (!track) return;
+  const rows = (snap.quotes && snap.quotes.length) ? snap.quotes : [];
+  if (!rows.length) return;
+  const html = rows.map((q) => {
+    const up = (q.change_pct || 0) >= 0;
+    return '<span class="tick"><span class="t-sym">' + esc(q.symbol) + '</span>' +
+      '<span class="t-px">' + esc(q.price) + '</span>' +
+      '<span class="t-ch ' + (up ? 'up' : 'down') + '">' + (up ? '+' : '') +
+      (q.change_pct || 0).toFixed(2) + '%</span></span>';
+  }).join("");
+  track.innerHTML = html + html;
+}
+
+function updateStatusBarFromSnapshot(snap) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set("sb-day", fmtMoney2(snap.day_pnl));
+  set("sb-pos", (snap.positions || []).length);
+}
+
 /* ---------------------------------------------------------- polling */
 async function refresh(scannerToo = false) {
   const [status, snap, metrics, trades, logs] = await Promise.all([
@@ -1713,10 +1768,17 @@ bindForwardUI();
 bindDataSourceUI();
 loadCommandCatalogue();
 renderTicker();
+// One-second refresh, plus a Server-Sent Events channel for true push updates.
+// The engine writes state; the server pushes it, so the UI updates with no
+// request cycle. The 1s poller is the fallback for browsers and proxies that
+# buffer SSE.
+const REFRESH_MS = 1000;
+
 refresh(true);
-setInterval(() => refresh(), 4000);
+setInterval(() => refresh(), REFRESH_MS);
 setInterval(() => pollCommandOutput(), 3000);
 setInterval(() => refreshScanner(), 15000);
+connectStream();
 if (window.location.hash === "#agents" || document.querySelector('.nav-item.active')?.dataset.view === "agents") {
   refreshAgents();
 }
