@@ -271,6 +271,10 @@ class RouterFeed:
     alpaca: AlpacaMarketData | None = None
     yahoo: object | None = None
     cache_dir: Path | None = None
+    # A source returning fewer bars than this is treated as a failure, not as
+    # success. Below ~200 bars the 200-period regime filter cannot compute, so
+    # such a frame is useless even though it is non-empty.
+    min_bars: int = 200
 
     def __post_init__(self) -> None:
         self.binance = self.binance or BinanceKlines()
@@ -289,6 +293,9 @@ class RouterFeed:
                 continue
             if frame is None or frame.empty:
                 errors.append(f"{source.name}: empty")
+                continue
+            if len(frame) < self.min_bars:
+                errors.append(f"{source.name}: only {len(frame)} bars (need {self.min_bars})")
                 continue
             return frame
         raise DataSourceError(f"{symbol}: every source failed -> " + " | ".join(errors))

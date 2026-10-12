@@ -94,8 +94,16 @@ class RoutingFeed:
 
         source = self.cfg.source
         if source in ("router", "binance", "alpaca"):
-            self._router = RouterFeed(alpaca=AlpacaMarketData(key, secret))
-        if source in ("router", "yahoo"):
+            from ts.altdata import RouterFeed
+
+            # Crypto goes to Binance public; everything else needs somewhere to
+            # fall back to, so Yahoo is part of the router rather than a
+            # separate branch.
+            self._router = RouterFeed(
+                alpaca=AlpacaMarketData(key, secret),
+                yahoo=YahooFeed(cache_dir=str(self.cfg.cache_dir)),
+            )
+        if source == "yahoo":
             self._yahoo = YahooFeed(cache_dir=str(self.cfg.cache_dir))
 
     # ------------------------------------------------------------------ feed
@@ -109,10 +117,7 @@ class RoutingFeed:
         errors: list[str] = []
         for source in self._sources():
             try:
-                frame = source.history(
-                    symbol, interval=interval, range_=range_,
-                    limit=self.cfg.max_bars,
-                )
+                frame = self._call(source, symbol, interval, range_)
             except DataSourceError as exc:
                 errors.append(str(exc))
                 continue
@@ -125,6 +130,19 @@ class RoutingFeed:
                 continue
             return frame
         raise DataSourceError(f"{symbol}: no source could serve it ({'; '.join(errors[:3])})")
+
+    @staticmethod
+    def _call(source, symbol: str, interval: str, range_: str):
+        """Call a source, passing ``limit`` only if it accepts one.
+
+        BinanceKlines takes ``limit``; YahooFeed does not. A TypeError from
+        that mismatch used to be swallowed into a generic "no data", which hid
+        the real cause.
+        """
+        try:
+            return source.history(symbol, interval=interval, range_=range_, limit=1000)
+        except TypeError:
+            return source.history(symbol, interval=interval, range_=range_)
 
     def _sources(self) -> list:
         if self.cfg.source == "yahoo" and self._yahoo is not None:

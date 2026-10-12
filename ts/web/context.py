@@ -7,6 +7,8 @@ MultiAgentSupervisor, and can launch either in a background thread.
 
 from __future__ import annotations
 
+import logging
+
 import sys
 import threading
 import time
@@ -35,9 +37,33 @@ def build_context(state: StateStore, symbols: list[str], interval: str,
     dry-run. Everything has a safe default.
     """
     config = dict(config or {})
-    feed = YahooFeed(cache_dir=str(ROOT / "data"))
+    # --- pick the data source the settings ask for
+    from ts.settings import SettingsStore
+
+    _settings = SettingsStore(state.root).load()
+    _source = getattr(_settings.instruments, "data_source", "router") or "router"
+
+    if _source == "router":
+        from ts.feedrouter import RoutingFeed, SOURCE_NOTES
+
+        route_feed = RoutingFeed(__import__(
+            "ts.feedrouter", fromlist=["DataSourceConfig"]).DataSourceConfig(
+                source="router", interval=interval, range_=range_))
+        logging.getLogger("ts.web.context").info(
+            "data source: router -> %s", SOURCE_NOTES["router"][:60])
+
+    feed = route_feed if _source == "router" else YahooFeed(cache_dir=str(ROOT / "data"))
 
     def fetcher(symbol, range_arg, interval_arg):
+        """Fetch one symbol. Works with either a routed or Yahoo feed."""
+        from ts.quality import validate
+
+        if _source == "router":
+            # a routed ticker (SPX500, BTCUSD) is already the vendor symbol
+            try:
+                return route_feed.history(symbol, interval=interval_arg, range_=range_arg)
+            except Exception:  # noqa: BLE001 - fall through to Yahoo
+                pass
         return DataFeed(feed=feed, interval=interval_arg,
                         range_=range_arg).pull([symbol]).get(symbol)
 

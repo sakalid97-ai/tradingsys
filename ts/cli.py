@@ -49,9 +49,24 @@ def setup_logging(verbose: bool = False) -> None:
     )
 
 
+UNIVERSE_FILES = ("config/universe.txt", "config/instruments.txt")
+
+
+def default_universe_path() -> Path | None:
+    """The universe file used when none was named on the command line."""
+    for candidate in UNIVERSE_FILES:
+        path = ROOT / candidate
+        if path.exists():
+            return path
+    return None
+
+
 def load_universe(path: str | None) -> list[str]:
     """Read a symbol file (one per line, ``#`` comments allowed)."""
     if not path:
+        default = default_universe_path()
+        if default is not None:
+            return load_universe(str(default))
         return DEFAULT_UNIVERSE
     file = Path(path)
     if not file.exists():

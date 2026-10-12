@@ -1,18 +1,31 @@
-# Trading universe — one symbol per line.
-# ETFs act as the regime filter and as liquidity ballast.
-SPY
-QQQ
-IWM
-# Large-cap equities
+# Default trading universe.
+#
+# 1-minute bars are only freely available for crypto, so this universe is what
+# the system can actually trade at 1m today. Indices and forex have no free 1m
+# source and would be dropped by the scan, so they are not listed here.
+#
+# Add them back at 5m or 15m if you want them (Setup -> Instruments -> Timeframe).
+
+# ---- crypto: Binance public, no API key, 1m bars instantly
+BTCUSD
+ETHUSD
+SOLUSD
+XRPUSD
+
+# ---- US equities: Yahoo, or Alpaca once a key is set in Setup -> Broker
 AAPL
 MSFT
 NVDA
-AMD
-META
-GOOGL
-AMZN
-AVGO
-TSLA
-NFLX
-CRM
-PLTR
+# AMD
+# META
+# GOOGL
+# AMZN
+# AVGO
+# NFLX
+# TSLA
+# QQQ
+# IWM
+
+# ---- NOT available at 1m without a paid feed or MT5:
+# SPX500  NAS100  US30  GER40  JPN225     (indices)
+# EURUSD  GBPUSD  USDJPY  AUDUSD  USDCAD   (forex)
