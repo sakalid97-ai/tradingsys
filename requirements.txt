@@ -1,0 +1,13 @@
+# Autonomous Trading System -- dependencies
+#
+# The core system (data, indicators, strategy, risk, backtest, metrics,
+# dashboard, paper broker, Alpaca adapter) runs on the Python standard
+# library ONLY.  pandas/numpy are used for time-series maths and can be
+# removed by rewriting the indicator layer if you need a zero-dependency box.
+
+pandas>=2.0
+numpy>=1.24
+
+# Optional, only if you want the bundled test suite to exercise the
+# standard-library chart API from a different process.
+# (there are none -- tests use stdlib unittest)

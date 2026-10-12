@@ -1,0 +1,22 @@
+# Multi-agent universe: indices, forex, and crypto.
+# One symbol per line, grouped by asset class.
+
+# ---- indices (CFDs) ----
+SPX500
+NAS100
+US30
+GER40
+JPN225
+
+# ---- forex (base/quote) ----
+EURUSD
+GBPUSD
+USDJPY
+AUDUSD
+USDCAD
+
+# ---- crypto ----
+BTCUSD
+ETHUSD
+SOLUSD
+XRPUSD

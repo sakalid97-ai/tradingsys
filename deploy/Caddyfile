@@ -1,0 +1,12 @@
+# Reverse proxy for the trading dashboard.
+#
+# Basic auth covers the whole UI: an unauthenticated trading console on the
+# public internet would let anyone place orders. Replace the hostname and the
+# credentials (read from .env by systemd, or set them literally below).
+
+trading.example.com {
+    basicauth /* {
+        {$DASHBOARD_USER} {$DASHBOARD_BCRYPT}
+    }
+    reverse_proxy 127.0.0.1:8642
+}

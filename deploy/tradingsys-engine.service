@@ -1,0 +1,26 @@
+[Unit]
+Description=Autonomous Trading System - multi-agent engine (dry run)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=-__APP_DIR__/.env
+# --interval 1m --range 7d: intraday. The engine is dry-run by default and
+# submits nothing.
+ExecStart=__APP_DIR__/.venv/bin/python run.py agents --cycle-seconds 60 --interval 1m --range 7d
+Restart=always
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=__APP_DIR__/state __APP_DIR__/data
+
+[Install]
+WantedBy=multi-user.target

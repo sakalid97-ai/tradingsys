@@ -1,0 +1,42 @@
+# ---- NEVER COMMIT THESE -------------------------------------------------
+# Credentials. .env holds real keys; settings.json may hold them too if the
+# user chose to store them on disk.
+.env
+.env.*
+!.env.example
+state/settings.json
+state/propfirm.json
+
+# Runtime state: journals, caches, logs, kill switch, forward trades.
+# These are per-machine and can be large.
+state/
+data/
+results/
+
+# Cache / build artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+build/
+dist/
+.pytest_cache/
+*.log
+*.tmp
+*.db
+*.sqlite3
+
+# Editors and OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Backups and local overrides
+*.bak
+*.orig
+local_settings.py

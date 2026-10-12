@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autonomous Trading System</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230b0f14'/><path d='M5 22 L12 14 L18 18 L27 7' stroke='%2334d399' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+</head>
+<body>
+
+<header id="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" class="logo" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="#111a24"/>
+      <path d="M5 22 L12 14 L18 18 L27 7" stroke="#34d399" stroke-width="2.6" fill="none"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="brand-text">
+      <strong>AUTONOMOUS</strong><span>TRADING SYSTEM</span>
+    </div>
+    <div class="live-dot" id="live-dot" title="engine heartbeat"></div>
+  </div>
+
+  <div class="status-cluster">
+    <div class="stat" id="stat-mode">
+      <span class="label">MODE</span>
+      <span class="value" id="v-mode">—</span>
+    </div>
+    <div class="stat" id="stat-equity">
+      <span class="label">EQUITY</span>
+      <span class="value num" id="v-equity">—</span>
+    </div>
+    <div class="stat" id="stat-day">
+      <span class="label">TODAY</span>
+      <span class="value num" id="v-day">—</span>
+    </div>
+    <div class="stat">
+      <span class="label">POSITIONS</span>
+      <span class="value num" id="v-positions">—</span>
+    </div>
+    <div class="stat">
+      <span class="label">UPTIME</span>
+      <span class="value num" id="v-uptime">—</span>
+    </div>
+  </div>
+
+  <div class="topbar-actions">
+    <span class="pill" id="pill-mode">IDLE</span>
+    <label class="engine-mode" title="What the engine will trade">
+      <select id="engine-mode">
+        <option value="agents">Multi-agent (indices / forex / crypto)</option>
+        <option value="paper">Trend system (paper broker)</option>
+      </select>
+    </label>
+    <button class="btn btn-start" id="btn-start-engine" title="Start the engine in this process">
+      ▶ START ENGINE
+    </button>
+    <button class="btn btn-ghost hidden" id="btn-stop-engine" title="Stop the engine">
+      ■ STOP ENGINE
+    </button>
+    <button class="btn btn-danger" id="btn-kill" title="Emergency stop — flatten and halt">
+      KILL SWITCH
+    </button>
+    <button class="btn btn-ghost" id="btn-resume" title="Clear the kill switch and resume">
+      RESUME
+    </button>
+  </div>
+</header>
+
+<div class="ticker-strip" id="ticker-strip">
+  <div class="ticker-track" id="ticker-track"></div>
+</div>
+
+<div id="layout">
+  <nav id="sidebar">
+    <button class="nav-item active" data-view="overview">
+      <span class="nav-ico">▤</span> Overview
+    </button>
+    <button class="nav-item" data-view="positions">
+      <span class="nav-ico">◫</span> Positions
+      <span class="badge" id="badge-positions">0</span>
+    </button>
+    <button class="nav-item" data-view="trades">
+      <span class="nav-ico">≡</span> Trades
+      <span class="badge" id="badge-trades">0</span>
+    </button>
+    <button class="nav-item" data-view="backtest">
+      <span class="nav-ico">◈</span> Backtest
+    </button>
+    <button class="nav-item" data-view="control">
+      <span class="nav-ico">▶</span> Control
+    </button>
+    <button class="nav-item" data-view="forward">
+      <span class="nav-ico">◷</span> Forward
+      <span class="badge" id="badge-forward">0</span>
+    </button>
+    <button class="nav-item" data-view="setup">
+      <span class="nav-ico">⚙</span> Setup
+      <span class="badge" id="badge-setup">!</span>
+    </button>
+    <button class="nav-item" data-view="agents">
+      <span class="nav-ico">⬡</span> Agents
+    </button>
+    <button class="nav-item" data-view="scanner">
+      <span class="nav-ico">⌕</span> Scanner
+    </button>
+    <button class="nav-item" data-view="logs">
+      <span class="nav-ico">▮</span> Logs
+    </button>
+    <div class="sidebar-foot">
+      <div class="mini-kv"><span>Kill switch</span><b id="sf-kill">—</b></div>
+      <div class="mini-kv"><span>Server</span><b id="sf-server">—</b></div>
+    </div>
+  </nav>
+
+  <main id="content">
+    <div id="banner" class="banner hidden"></div>
+
+    <!-- ================= OVERVIEW ================= -->
+    <section class="view active" data-view="overview">
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Equity Curve</h2>
+          <div class="panel-tools">
+            <span class="legend"><i class="sw sw-equity"></i> Equity</span>
+            <span class="legend"><i class="sw sw-dd"></i> Drawdown</span>
+            <span class="legend"><i class="sw sw-bh"></i> Buy &amp; hold</span>
+          </div>
+        </div>
+        <div class="chart-box tall"><canvas id="chart-equity"></canvas></div>
+      </div>
+
+      <div class="panel-row">
+        <div class="panel">
+          <div class="panel-head"><h2>Trade R-Multiple Distribution</h2></div>
+          <div class="chart-box"><canvas id="chart-hist"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Underwater (Drawdown)</h2></div>
+          <div class="chart-box"><canvas id="chart-dd"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>System</h2></div>
+        <pre class="code" id="strategy-desc"></pre>
+      </div>
+    </section>
+
+    <!-- ================= POSITIONS ================= -->
+    <section class="view" data-view="positions">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Open Positions</h2>
+          <button class="btn btn-ghost" id="btn-refresh-pos">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="table-positions">
+            <thead>
+              <tr>
+                <th>Symbol</th><th>Side</th><th class="num">Qty</th>
+                <th class="num">Entry</th><th class="num">Last</th><th class="num">Stop</th>
+                <th class="num">R (open)</th><th class="num">P&amp;L</th>
+                <th class="num">Risk $</th><th>Age</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="10" class="empty">No open positions</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TRADES ================= -->
+    <section class="view" data-view="trades">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Trade Journal</h2>
+          <div class="panel-tools">
+            <button class="chip active" data-filter="all">All</button>
+            <button class="chip" data-filter="win">Wins</button>
+            <button class="chip" data-filter="loss">Losses</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="table-trades">
+            <thead>
+              <tr>
+                <th>Symbol</th><th>Side</th><th class="num">Qty</th>
+                <th>Entry time</th><th class="num">Entry</th>
+                <th>Exit time</th><th class="num">Exit</th>
+                <th class="num">R</th><th class="num">P&amp;L</th>
+                <th>Exit reason</th><th class="num">Bars</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="11" class="empty">No trades recorded</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= BACKTEST ================= -->
+    <section class="view" data-view="backtest">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Backtest</h2>
+          <div class="panel-tools">
+            <span class="hint" id="bt-saved">—</span>
+            <button class="btn btn-primary" id="btn-run-bt">Run Backtest</button>
+          </div>
+        </div>
+        <div class="kpi-grid" id="bt-kpis"></div>
+        <div class="chart-box tall"><canvas id="chart-bt-equity"></canvas></div>
+      </div>
+
+      <div class="panel-row">
+        <div class="panel">
+          <div class="panel-head"><h2>Per Symbol</h2></div>
+          <div class="table-wrap">
+            <table class="table" id="table-symbols">
+              <thead><tr><th>Symbol</th><th class="num">Trades</th><th class="num">Win&nbsp;%</th>
+              <th class="num">Total R</th><th class="num">P&amp;L</th></tr></thead>
+              <tbody><tr><td colspan="5" class="empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Monte Carlo (IID bootstrap)</h2></div>
+          <div class="kv-list" id="mc-list"></div>
+          <p class="foot-note">Randomises the order of realised trades to show the
+          spread of plausible outcomes. Assumes trades are independent — an
+          approximation, not a fact.</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Parameters</h2></div>
+        <pre class="code" id="bt-params"></pre>
+      </div>
+    </section>
+
+    <!-- ================= SCANNER ================= -->
+    <section class="view" data-view="scanner">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Signal Scanner</h2>
+          <button class="btn btn-ghost" id="btn-refresh-scan">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="table-scanner">
+            <thead>
+              <tr><th>Symbol</th><th class="num">Close</th><th>Regime</th>
+              <th>Breakout</th><th>ADX ok</th><th>Volume</th><th>SIGNAL</th>
+              <th class="num">ATR</th></tr>
+            </thead>
+            <tbody><tr><td colspan="8" class="empty">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= AGENTS ================= -->
+    <section class="view" data-view="agents">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Multi-Agent System</h2>
+          <span class="hint" id="agents-src">—</span>
+        </div>
+        <div class="agent-grid" id="agent-grid"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Bayesian Posteriors</h2></div>
+        <div class="table-wrap">
+          <table class="table" id="table-posteriors">
+            <thead><tr><th>Symbol</th><th class="num">P(up)</th><th class="num">90% CI</th>
+              <th class="num">Conf.</th><th class="num">Evidence</th><th>Direction</th></tr></thead>
+            <tbody><tr><td colspan="6" class="empty">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Opportunities</h2></div>
+        <div class="table-wrap">
+          <table class="table" id="table-plans">
+            <thead><tr><th>Symbol</th><th>Class</th><th>Side</th><th class="num">Payoff</th>
+              <th class="num">P(win)</th><th class="num">Expectancy</th><th>Grade</th>
+              <th class="num">Qty</th><th class="num">Risk $</th><th>Guardian</th></tr></thead>
+            <tbody><tr><td colspan="10" class="empty">Run `py run.py agents` to populate</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel-row">
+        <div class="panel">
+          <div class="panel-head"><h2>Risk State</h2></div>
+          <div class="kv-list" id="agent-risk"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Execution</h2></div>
+          <div class="kv-list" id="agent-exec"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Market Regimes</h2></div>
+        <div class="table-wrap">
+          <table class="table" id="table-regimes">
+            <thead><tr><th>Symbol</th><th class="num">Price</th><th>Regime</th>
+              <th class="num">ADX</th><th class="num">R²</th><th class="num">Mom</th>
+              <th class="num">Efficiency</th><th>Breakout</th><th>Stale</th></tr></thead>
+            <tbody><tr><td colspan="9" class="empty">—</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ================= CONTROL (buttons / switches / selections) ================= -->
+    <section class="view" data-view="control">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Run a Command</h2>
+          <div class="panel-tools">
+            <span class="pill" id="cmd-pill">idle</span>
+            <button class="btn btn-ghost" id="btn-cmd-stop" title="Stop the running command">
+              ■ Stop
+            </button>
+          </div>
+        </div>
+        <div class="cmd-grid" id="cmd-grid"></div>
+        <p class="foot-note">Pick a card, set the options with the switches and dropdowns,
+        then press RUN. Nothing is typed.</p>
+      </div>
+
+      <div class="panel" id="cmd-detail">
+        <div class="panel-head">
+          <h2 id="cmd-detail-name">Options</h2>
+          <span class="hint" id="cmd-detail-desc"></span>
+        </div>
+        <div class="cmd-form" id="cmd-form"></div>
+        <div class="cmd-actions">
+          <button class="btn btn-primary" id="btn-cmd-run">▶ RUN</button>
+          <button class="btn btn-ghost" id="btn-cmd-defaults">Reset to defaults</button>
+          <button class="btn btn-ghost" id="btn-cmd-clear">Clear output</button>
+        </div>
+        <div class="cmd-warning hidden" id="cmd-warning"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Output</h2>
+          <span class="hint" id="cmd-out-meta">no command run yet</span>
+        </div>
+        <pre class="console-out" id="cmd-output">Select a command above to begin.</pre>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Recent Runs</h2></div>
+        <div class="table-wrap">
+          <table class="table" id="table-runs">
+            <thead><tr><th>Command</th><th>Started</th><th>Finished</th>
+              <th class="num">Exit</th><th>State</th></tr></thead>
+            <tbody><tr><td colspan="5" class="empty">nothing run yet</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ================= FORWARD TRACKING ================= -->
+    <section class="view" data-view="forward">
+      <div class="verdict" id="forward-verdict">no forward trades recorded yet</div>
+
+      <div class="setup-actions" style="padding:0 0 14px 0">
+        <button class="btn btn-primary" id="btn-fwd-baseline">Use last backtest as the prediction</button>
+        <button class="btn" id="btn-fwd-import">Import engine trades</button>
+        <button class="btn btn-ghost" id="btn-fwd-refresh">Refresh</button>
+        <button class="btn btn-ghost" id="btn-fwd-reset">Reset journal</button>
+      </div>
+
+      <div class="kpi-grid" id="forward-kpis"></div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Forward P&amp;L</h2>
+          <span class="hint" id="fwd-curve-meta"></span></div>
+        <div class="chart-box"><canvas id="chart-forward"></canvas></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Predicted vs Realised</h2>
+          <span class="hint">the only honest comparison: is the gap bigger than noise?</span></div>
+        <div class="table-wrap">
+          <table class="table" id="table-drift">
+            <thead><tr><th>Metric</th><th class="num">Backtest predicted</th>
+              <th class="num">Realised</th><th>95% interval (realised)</th>
+              <th class="num">Gap</th><th>Verdict</th></tr></thead>
+            <tbody><tr><td colspan="6" class="empty">capture a baseline to compare</td></tr></tbody>
+          </table>
+        </div>
+        <p class="foot-note">A metric is only flagged when the <b>prediction</b> falls
+        outside the interval the realised sample can support — that is the definition of
+        a difference larger than sampling noise.</p>
+      </div>
+
+      <div class="panel-row">
+        <div class="panel">
+          <div class="panel-head"><h2>By Strategy</h2></div>
+          <div class="table-wrap">
+            <table class="table" id="table-fwd-strategy">
+              <thead><tr><th>Strategy</th><th class="num">Trades</th>
+                <th class="num">Win %</th><th class="num">Total R</th>
+                <th class="num">P&amp;L</th></tr></thead>
+              <tbody><tr><td colspan="5" class="empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>By Symbol</h2></div>
+          <div class="table-wrap">
+            <table class="table" id="table-fwd-symbol">
+              <thead><tr><th>Symbol</th><th class="num">Trades</th>
+                <th class="num">Win %</th><th class="num">Total R</th>
+                <th class="num">P&amp;L</th></tr></thead>
+              <tbody><tr><td colspan="5" class="empty">—</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SETUP (broker / strategy / instruments / risk) ================= -->
+    <section class="view" data-view="setup">
+
+      <div class="panel">
+        <div class="panel-head"><h2>Broker Connection</h2>
+          <button class="btn btn-ghost" id="btn-refresh-brokers">Refresh</button></div>
+        <div class="setup-grid">
+          <label class="field">
+            <span class="field-label">Venue</span>
+            <select id="f-broker" class="select"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Account label</span>
+            <input class="input" id="f-broker-label" placeholder="My funded account">
+          </label>
+          <label class="field">
+            <span class="field-label">API key / login</span>
+            <input class="input" id="f-broker-key" placeholder="from the environment">
+          </label>
+          <label class="field">
+            <span class="field-label">API secret / password</span>
+            <input class="input" id="f-broker-secret" type="password" placeholder="••••••">
+          </label>
+          <label class="field">
+            <span class="field-label">Server (Exness MT5)</span>
+            <input class="input" id="f-broker-passphrase" placeholder="Exness-MT5Real8">
+          </label>
+          <div class="field">
+            <span class="field-label">Mode</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-broker-testnet" checked>
+                <span class="slider"></span></label>
+              <span class="switch-label" id="lbl-broker-testnet">Testnet / paper</span>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">Store credentials on disk</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-broker-store">
+                <span class="slider"></span></label>
+              <span class="switch-label">off — environment variables preferred</span>
+            </div>
+          </div>
+        </div>
+        <div class="setup-actions">
+          <button class="btn btn-primary" id="btn-broker-save">Save connection</button>
+          <button class="btn" id="btn-broker-test">Test connection</button>
+          <button class="btn btn-ghost" id="btn-broker-disconnect">Disconnect</button>
+        </div>
+        <div class="broker-note" id="broker-note"></div>
+        <div class="broker-test hidden" id="broker-test"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Strategies</h2></div>
+        <div class="setup-grid">
+          <div class="field">
+            <span class="field-label">Trend breakout system</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-run-trend">
+                <span class="slider"></span></label>
+              <span class="switch-label">20-day breakout with regime filter</span>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">Multi-agent system</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-run-agents">
+                <span class="slider"></span></label>
+              <span class="switch-label">six agents + Bayesian + Kelly</span>
+            </div>
+          </div>
+          <label class="field">
+            <span class="field-label">Entry lookback (bars)</span>
+            <input class="input num" type="number" id="f-entry-lookback" value="20">
+          </label>
+          <label class="field">
+            <span class="field-label">Exit lookback (bars)</span>
+            <input class="input num" type="number" id="f-exit-lookback" value="10">
+          </label>
+          <label class="field">
+            <span class="field-label">Regime MA period</span>
+            <input class="input num" type="number" id="f-regime-ma" value="200">
+          </label>
+          <label class="field">
+            <span class="field-label">Minimum ADX</span>
+            <input class="input num" type="number" id="f-adx-min" value="20" step="1">
+          </label>
+          <label class="field">
+            <span class="field-label">Initial stop (ATR ×)</span>
+            <input class="input num" type="number" id="f-atr-stop" value="2" step="0.1">
+          </label>
+          <label class="field">
+            <span class="field-label">Trailing stop (ATR ×)</span>
+            <input class="input num" type="number" id="f-atr-trail" value="3" step="0.1">
+          </label>
+          <label class="field">
+            <span class="field-label">Kelly fraction</span>
+            <input class="input num" type="number" id="f-kelly" value="0.25" step="0.05">
+          </label>
+          <label class="field">
+            <span class="field-label">Minimum expectancy (R)</span>
+            <input class="input num" type="number" id="f-min-exp" value="0.2" step="0.05">
+          </label>
+          <label class="field">
+            <span class="field-label">Minimum confidence</span>
+            <input class="input num" type="number" id="f-min-conf" value="0.65" step="0.05">
+          </label>
+          <div class="field">
+            <span class="field-label">Allow short entries</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-shorts">
+                <span class="slider"></span></label>
+              <span class="switch-label">two-sided trading</span>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">Require above-average volume</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-volume">
+                <span class="slider"></span></label>
+              <span class="switch-label">1m volume is unreliable — leave off</span>
+            </div>
+          </div>
+        </div>
+        <div class="setup-actions">
+          <button class="btn btn-primary" id="btn-save-strategy">Save strategy</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Instruments &amp; Timeframe</h2></div>
+        <div class="setup-grid">
+          <label class="field">
+            <span class="field-label">Timeframe</span>
+            <select id="f-timeframe" class="select">
+              <option value="1m">1 minute</option>
+              <option value="5m">5 minutes</option>
+              <option value="15m">15 minutes</option>
+              <option value="30m">30 minutes</option>
+              <option value="1h">1 hour</option>
+              <option value="1d">1 day</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">History range</span>
+            <select id="f-range" class="select">
+              <option value="7d">7 days</option>
+              <option value="60d">60 days</option>
+              <option value="1y">1 year</option>
+              <option value="5y">5 years</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Max symbols</span>
+            <input class="input num" type="number" id="f-max-symbols" value="20">
+          </label>
+          <label class="field">
+            <span class="field-label">Market gate symbol</span>
+            <input class="input" id="f-gate" value="SPY" placeholder="SPY">
+          </label>
+          <div class="field">
+            <span class="field-label">Asset classes</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-class-index">
+                <span class="slider"></span></label>
+              <span class="switch-label">Indices</span>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">Forex</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-class-forex">
+                <span class="slider"></span></label>
+              <span class="switch-label">FX majors</span>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">Crypto</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-class-crypto">
+                <span class="slider"></span></label>
+              <span class="switch-label">24/7 markets</span>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">Use the market gate</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-use-gate" checked>
+                <span class="slider"></span></label>
+              <span class="switch-label">no new entries when risk-off</span>
+            </div>
+          </div>
+        </div>
+        <div class="setup-actions">
+          <button class="btn btn-primary" id="btn-save-instruments">Save instruments</button>
+          <button class="btn btn-ghost" id="btn-fill-defaults">Use class defaults</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>Position Sizing &amp; Risk</h2>
+          <button class="btn btn-ghost" id="btn-refresh-prop">Refresh</button></div>
+        <div class="setup-grid">
+          <label class="field">
+            <span class="field-label">Prop-firm profile</span>
+            <select id="f-prop" class="select"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Starting balance</span>
+            <input class="input num" type="number" id="f-start-balance" value="100000">
+          </label>
+          <label class="field">
+            <span class="field-label">Safety buffer</span>
+            <select id="f-buffer" class="select">
+              <option value="0">0% — exactly the firm's limit (not recommended)</option>
+              <option value="0.15" selected>15% inside the limit</option>
+              <option value="0.25">25% inside (recommended)</option>
+              <option value="0.35">35% inside</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Risk per trade</span>
+            <input class="input num" type="number" id="f-risk-trade" value="0.01" step="0.005">
+          </label>
+          <label class="field">
+            <span class="field-label">Max position size</span>
+            <input class="input num" type="number" id="f-max-pos-pct" value="0.2" step="0.05">
+          </label>
+          <label class="field">
+            <span class="field-label">Max open positions</span>
+            <input class="input num" type="number" id="f-max-pos" value="8">
+          </label>
+          <label class="field">
+            <span class="field-label">Max total risk</span>
+            <input class="input num" type="number" id="f-max-risk" value="0.06" step="0.01">
+          </label>
+          <label class="field">
+            <span class="field-label">Daily loss limit</span>
+            <input class="input num" type="number" id="f-daily" value="0.03" step="0.005">
+          </label>
+          <label class="field">
+            <span class="field-label">Drawdown halt</span>
+            <input class="input num" type="number" id="f-dd" value="0.15" step="0.01">
+          </label>
+          <label class="field">
+            <span class="field-label">Max fraction of bankroll</span>
+            <input class="input num" type="number" id="f-max-frac" value="0.05" step="0.01">
+          </label>
+          <label class="field">
+            <span class="field-label">Slippage (bps)</span>
+            <input class="input num" type="number" id="f-slippage" value="5" step="1">
+          </label>
+          <label class="field">
+            <span class="field-label">Commission</span>
+            <input class="input num" type="number" id="f-commission" value="0.005" step="0.005">
+          </label>
+          <div class="field">
+            <span class="field-label">Dry run (never submit)</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-dry-run" checked>
+                <span class="slider"></span></label>
+              <span class="switch-label">no orders are sent</span>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">Auto kill switch on breach</span>
+            <div class="switch-row">
+              <label class="switch"><input type="checkbox" id="f-kill-risk" checked>
+                <span class="slider"></span></label>
+              <span class="switch-label">halt and flatten automatically</span>
+            </div>
+          </div>
+        </div>
+        <div class="setup-actions">
+          <button class="btn btn-primary" id="btn-apply-prop">Apply prop-firm profile</button>
+          <button class="btn" id="btn-save-risk">Save risk settings</button>
+        </div>
+        <div class="prop-note" id="prop-note"></div>
+      </div>
+    </section>
+
+    <!-- ================= LOGS ================= -->
+    <section class="view" data-view="logs">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Event Log</h2>
+          <button class="btn btn-ghost" id="btn-refresh-logs">Refresh</button>
+        </div>
+        <div class="log-stream" id="log-stream"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer id="statusbar">
+  <div class="sb-cell"><span class="sb-label">Engine</span><b id="sb-engine">stopped</b></div>
+  <div class="sb-cell"><span class="sb-label">Broker</span><b id="sb-broker">paper</b></div>
+  <div class="sb-cell"><span class="sb-label">Risk</span><b id="sb-risk">—</b></div>
+  <div class="sb-cell"><span class="sb-label">Positions</span><b id="sb-pos">0</b></div>
+  <div class="sb-cell"><span class="sb-label">Today</span><b id="sb-day">—</b></div>
+  <div class="sb-cell sb-right"><span class="sb-label">v</span><b id="sb-version">—</b></div>
+  <div class="sb-cell sb-right"><span class="sb-label">Latency</span><b id="sb-latency">—</b></div>
+</footer>
+
+<div id="toast-wrap"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

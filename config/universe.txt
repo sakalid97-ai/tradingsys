@@ -1,0 +1,18 @@
+# Trading universe — one symbol per line.
+# ETFs act as the regime filter and as liquidity ballast.
+SPY
+QQQ
+IWM
+# Large-cap equities
+AAPL
+MSFT
+NVDA
+AMD
+META
+GOOGL
+AMZN
+AVGO
+TSLA
+NFLX
+CRM
+PLTR

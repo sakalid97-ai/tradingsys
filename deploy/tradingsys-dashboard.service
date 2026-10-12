@@ -1,0 +1,25 @@
+[Unit]
+Description=Autonomous Trading System - dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=-__APP_DIR__/.env
+ExecStart=__APP_DIR__/.venv/bin/python run.py dashboard --host 127.0.0.1 --port 8642
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# --- hardening: the engine never needs more than this
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=__APP_DIR__/state __APP_DIR__/data
+
+[Install]
+WantedBy=multi-user.target

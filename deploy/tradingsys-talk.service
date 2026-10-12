@@ -1,0 +1,24 @@
+[Unit]
+Description=Autonomous Trading System - Telegram command channel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=-__APP_DIR__/.env
+ExecStart=__APP_DIR__/.venv/bin/python run.py talk
+Restart=always
+RestartSec=15
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=__APP_DIR__/state
+
+[Install]
+WantedBy=multi-user.target
