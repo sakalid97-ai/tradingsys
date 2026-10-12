@@ -88,6 +88,16 @@ class NotifyConfig:
         }
 
 
+def coerce_severity(value) -> Severity:
+    """Accept a Severity, or its string name, and normalise to the enum."""
+    if isinstance(value, Severity):
+        return value
+    try:
+        return Severity(str(value).lower())
+    except ValueError:
+        return Severity.INFO
+
+
 SEVERITY_ORDER = {
     Severity.INFO: 0,
     Severity.TRADE: 1,
@@ -96,9 +106,10 @@ SEVERITY_ORDER = {
 }
 
 
-def format_alert(title: str, body: str, severity: Severity = Severity.INFO,
+def format_alert(title: str, body: str, severity=Severity.INFO,
                  fields: dict | None = None) -> str:
     """Build a plain-text message. Markdown-safe: no unsupported entities."""
+    severity = coerce_severity(severity)
     icon = {
         Severity.INFO: "ℹ️",
         Severity.TRADE: "📈",
@@ -156,11 +167,16 @@ class Notifier:
 
     # ----------------------------------------------------------------- sending
 
-    def send(self, title: str, body: str = "", severity: Severity = Severity.INFO,
+    def send(self, title: str, body: str = "", severity=Severity.INFO,
              fields: dict | None = None, kind: str = "alert") -> bool:
-        """Deliver one alert. Returns True if at least one channel accepted it."""
+        """Deliver one alert. Returns True if at least one channel accepted it.
+
+        ``severity`` accepts either a :class:`Severity` or its string name, so
+        callers do not have to import the enum just to raise an alert.
+        """
         if not self.cfg.any_enabled:
             return False
+        severity = coerce_severity(severity)
         if not self._allowed(kind, severity):
             return False
 

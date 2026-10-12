@@ -71,7 +71,8 @@ class MultiAgentSupervisor:
         )
         self.sizer = KellySizer(kelly_config)
 
-        self.scanner = ScannerAgent(self.bus, self.feed, self.symbols)
+        self.scanner = ScannerAgent(self.bus, self.feed, self.symbols,
+                                 max_workers=getattr(self.cfg, "scan_workers", 8))
         self.analysis = AnalysisAgent(self.bus, self.feed)
         self.probability = ProbabilityAgent(self.bus)
         # every agent trade is journalled as forward evidence for the Forward tab

@@ -80,6 +80,9 @@ def build_context(state: StateStore, symbols: list[str], interval: str,
                     universe=symbols,
                     kill_switch=lambda: (state.root / "KILL").exists(),
                     forward_journal=ForwardJournal(state.root),
+                    notifier=notifier,
+                    approvals=approvals,
+                    policy=policy,
                 )
                 holder.update(engine=engine, broker=broker)
                 context.engine = engine
@@ -134,6 +137,23 @@ def build_context(state: StateStore, symbols: list[str], interval: str,
                 context.agents = None
             return {"stopped": stopped, "engine_running": False}
 
+    # --- human-in-the-loop: the engine asks a human only when it is unsure ---
+    from ts.agents.policy import AutoApprovePolicy
+    from ts.approvals import ApprovalGate
+    from ts.notify import NotifyConfig, Notifier
+
+    notifier = Notifier(NotifyConfig())
+    policy = AutoApprovePolicy(
+        min_expectancy=float(config.get("min_expectancy", 0.35)),
+        min_confidence=float(config.get("min_confidence", 0.75)),
+        max_auto_risk_pct=float(config.get("max_auto_risk_pct", 0.02)),
+    ).clamp()
+    approvals = ApprovalGate(
+        notifier=notifier,
+        timeout_seconds=float(config.get("approval_timeout", 90)),
+        require_approval=bool(config.get("require_approval", False)),
+    )
+
     context = AppContext(
         state=state,
         kill_file=state.root / "KILL",
@@ -160,6 +180,12 @@ def build_context(state: StateStore, symbols: list[str], interval: str,
         )
 
     context.backtester_factory = backtester_factory
+    context.approvals = approvals
+    context.policy = policy
+    context.notifier = notifier
+    holder['approvals'] = approvals
+    holder['policy'] = policy
+    holder['notifier'] = notifier
     return context, holder
 
 

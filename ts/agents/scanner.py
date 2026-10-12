@@ -46,26 +46,37 @@ class ScannerAgent(Agent):
     name = "scanner"
     role = "multi-market monitoring"
 
-    def __init__(self, bus, feed, symbols) -> None:
+    def __init__(self, bus, feed, symbols, max_workers: int = 8) -> None:
         super().__init__(bus)
         self.feed = feed
         self.symbols = list(symbols)
+        # I/O-bound fetches, so more workers than cores helps; capped so a
+        # 50-symbol universe cannot open 50 sockets at once.
+        self.max_workers = max(1, min(int(max_workers), 12))
         self.report = ScanReport()
 
     def run(self) -> None:
         import datetime as _dt
+
+        # Fetches are independent, so they run concurrently: the wall-clock cost
+        # becomes the slowest single symbol rather than the sum of all of them.
+        # Results are then re-ordered to match the configured universe so the
+        # published sequence -- and therefore every downstream consumer -- stays
+        # deterministic.
+        from ..parallel import parallel_map
+
+        snapshots = parallel_map(self.feed.fetch, self.symbols,
+                                 max_workers=self.max_workers)
 
         scanned: list[str] = []
         fresh: list[str] = []
         stale: list[str] = []
         failed: list[str] = []
 
-        for symbol in self.symbols:
-            try:
-                snap = self.feed.fetch(symbol)
-            except Exception as exc:  # noqa: BLE001
+        for symbol, snap in zip(self.symbols, snapshots):
+            if snap is None:
                 failed.append(symbol)
-                self.alarm(f"fetch failed for {symbol}: {exc}")
+                self.alarm(f"fetch failed for {symbol}")
                 continue
 
             scanned.append(symbol)

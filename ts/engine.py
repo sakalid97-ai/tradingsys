@@ -104,6 +104,9 @@ class TradingEngine:
         universe: list[str] | None = None,
         kill_switch=None,
         forward_journal=None,
+        notifier=None,
+        approvals=None,
+        policy=None,
     ) -> None:
         self.broker = broker
         self.fetch = data_fetcher            # callable(symbol, range, interval) -> DataFrame
@@ -116,6 +119,10 @@ class TradingEngine:
         # When supplied, every closed trade is journalled here automatically.
         # Backtests never reach it -- a backtest is a prediction, not evidence.
         self.forward_journal = forward_journal
+        self.notifier = notifier
+        # when set, the engine asks a human only for unconvincing plans
+        self.approvals = approvals
+        self.policy = policy
 
         self.strategy = Strategy(self.params)
         self.guard = PortfolioGuard(self.risk)
@@ -383,6 +390,57 @@ class TradingEngine:
                 sig = apply_market_gate({symbol: sig}, market).get(symbol, sig)
         return sig.iloc[-1]
 
+    def _needs_approval(self, symbol: str, frame, equity: float) -> bool:
+        """Consult the auto-approval policy; queue a question if unconvincing.
+
+        Returns True when the trade should NOT auto-execute. A strong plan
+        returns False and the entry proceeds untouched; a marginal one is
+        queued for a human answer instead.
+        """
+        if self.policy is None or self.approvals is None:
+            return False
+        try:
+            payload = self._signal_for(symbol, frame)
+            if not bool(payload.get("entry_long", False)):
+                return False
+        except (ValueError, KeyError, IndexError):
+            return False
+
+        expectancy_r = float(payload.get("expectancy_r", 0.0) or 0.0)
+        confidence = float(payload.get("confidence", 0.5) or 0.5)
+        atr = float(payload.get("atr", 0.0) or 0.0)
+        try:
+            price = float(frame["close"].iloc[-1])
+        except (IndexError, ValueError, KeyError):
+            return False
+        stop_dist = self.strategy.stop_distance(atr)
+        risk_pct = (stop_dist / price) if price > 0 else 0.0
+
+        needs, tier, reason = self.policy.evaluate(
+            expectancy_r, confidence, side="long", symbol=symbol,
+            risk_pct=risk_pct)
+        if not needs:
+            log.debug("%s auto-approved (%s): %s", symbol, tier, reason)
+            return False
+
+        try:
+            self.approvals.request(
+                action="enter",
+                title=f"APPROVE ENTRY: long {symbol}",
+                body=reason,
+                fields={
+                    "symbol": symbol,
+                    "side": "long",
+                    "expectancy": f"{expectancy_r:+.2f}R",
+                    "confidence": f"{confidence:.0%}",
+                    "risk": f"{risk_pct:.2%} of equity",
+                    "tier": tier,
+                },
+            )
+        except RuntimeError as exc:
+            self.alarm(f"approval queue is full: {exc}")
+        return True
+
     def _find_entries(self, equity: float, cash: float) -> list[dict]:
         entries: list[dict] = []
         state = PortfolioRiskState(
@@ -400,6 +458,10 @@ class TradingEngine:
             if len(entries) >= self.cfg.max_orders_per_tick:
                 break
             if symbol in self.managed:
+                continue
+            # --- ask a human only when this plan is not convincing on its own
+            if self.policy is not None and self.approvals is not None and \
+                    self._needs_approval(symbol, frame, equity):
                 continue
             try:
                 sig = self._signal_for(symbol, frame)
