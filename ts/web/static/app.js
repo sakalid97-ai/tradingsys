@@ -1017,6 +1017,49 @@ function bindForwardUI() {
   });
 }
 
+
+/* ============================================================
+   DATA SOURCE — Binance public for crypto, Yahoo as fallback
+   ============================================================ */
+
+let dataSources = [];
+
+async function loadDataSources() {
+  const data = await api("/api/data-sources");
+  if (!data || !data.sources) return;
+  dataSources = data.sources;
+  const sel = $("#f-data-source");
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = data.sources.map((s) =>
+    `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join("");
+  if (current) sel.value = current;
+  updateDataSourceNote();
+}
+
+function updateDataSourceNote() {
+  const sel = $("#f-data-source");
+  const note = $("#data-source-note");
+  if (!sel || !note) return;
+  const source = dataSources.find((s) => s.id === sel.value);
+  if (!source) return;
+  const limits = {
+    router: "Crypto: Binance public, no key. Everything else: Yahoo. "
+            + "Symbols no source can serve are dropped, not fatal.",
+    binance: "Crypto only, no API key. Fastest option.",
+    alpaca: "Crypto is public. Equities need a free Alpaca key in Setup > Broker.",
+    yahoo: "Everything, but rate-limited at 1m across many symbols.",
+  };
+  note.innerHTML = `<b>${esc(source.label)}</b> — ${esc(limits[sel.value] || source.note)}`;
+}
+
+function bindDataSourceUI() {
+  $("#f-data-source")?.addEventListener("change", updateDataSourceNote);
+  $("#btn-fill-defaults")?.addEventListener("click", () => {
+    setTimeout(updateDataSourceNote, 50);
+  });
+}
+
 /* ---------------------------------------------------------- polling */
 async function refresh(scannerToo = false) {
   const [status, snap, metrics, trades, logs] = await Promise.all([
@@ -1414,6 +1457,7 @@ function collectInstruments() {
   if ($("#f-class-forex").checked) classes.push("forex");
   if ($("#f-class-crypto").checked) classes.push("crypto");
   return {
+    data_source: $("#f-data-source") ? $("#f-data-source").value : "router",
     timeframe: $("#f-timeframe").value,
     range_: $("#f-range").value,
     asset_classes: classes.length ? classes : ["crypto"],
@@ -1549,6 +1593,10 @@ async function loadSetupForms() {
     setSwitch($("#f-volume"), !!s.require_volume);
 
     const i = settings.instruments || {};
+    if (i.data_source && $("#f-data-source")) {
+      $("#f-data-source").value = i.data_source;
+      updateDataSourceNote();
+    }
     if (i.timeframe) $("#f-timeframe").value = i.timeframe;
     if (i.range_) $("#f-range").value = i.range_;
     $("#f-max-symbols").value = i.max_symbols ?? 20;
@@ -1594,7 +1642,7 @@ $$(".nav-item").forEach((btn) => {
     if (view === "agents") refreshAgents();
     if (view === "control") { loadCommandCatalogue(); pollCommandOutput(true); }
     if (view === "forward") loadForward();
-    if (view === "setup") { loadBrokers(); loadSetupForms(); }
+    if (view === "setup") { loadBrokers(); loadSetupForms(); loadDataSources(); }
     if (view === "scanner") refreshScanner();
     if (view === "trades") renderTrades(cachedTrades);
     if (view === "overview" && charts.hist) charts.hist.resolution?.();
@@ -1662,6 +1710,7 @@ $("#btn-refresh-scan")?.addEventListener("click", refreshScanner);
 /* ---------------------------------------------------------- boot */
 bindControlUI();
 bindForwardUI();
+bindDataSourceUI();
 loadCommandCatalogue();
 renderTicker();
 refresh(true);

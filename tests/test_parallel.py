@@ -41,18 +41,21 @@ class TestParallelMap(unittest.TestCase):
         self.assertLess(elapsed, 0.45, "fetches did not actually overlap")
 
     def test_one_failure_does_not_affect_others(self):
+        """A failure is surfaced as the exception, others still complete."""
         def boom(value):
             if value == 3:
                 raise RuntimeError("bad ticker")
             return value * 10
 
         result = parallel_map(boom, list(range(6)), max_workers=4)
-        self.assertIsNone(result[3])
-        self.assertEqual([r for r in result if r is not None], [0, 10, 20, 40, 50])
+        self.assertIsInstance(result[3], RuntimeError)
+        self.assertIn("bad ticker", str(result[3]))
+        self.assertEqual([r for r in result if not isinstance(r, Exception)],
+                         [0, 10, 20, 40, 50])
 
-    def test_all_failures_return_all_none(self):
+    def test_all_failures_return_all_exceptions(self):
         result = parallel_map(lambda v: 1 / 0, list(range(5)), max_workers=3)
-        self.assertEqual(result, [None] * 5)
+        self.assertTrue(all(isinstance(r, ZeroDivisionError) for r in result))
 
     def test_worker_count_is_capped_at_item_count(self):
         result = parallel_map(slow_identity, [1, 2], max_workers=64)
@@ -66,8 +69,9 @@ class TestParallelMap(unittest.TestCase):
             self.assertEqual(parallel_map(slow_identity, values, max_workers=8),
                              first)
 
-    def test_safe_call_returns_none_on_failure(self):
-        self.assertIsNone(_safe_call(lambda: 1 / 0, None))
+    def test_safe_call_returns_the_exception(self):
+        result = _safe_call(lambda v: 1 / v, 0)
+        self.assertIsInstance(result, ZeroDivisionError)
 
 
 class TestScannerParallel(unittest.TestCase):

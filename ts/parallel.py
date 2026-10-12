@@ -20,8 +20,10 @@ log = logging.getLogger(__name__)
 def parallel_map(func, items, max_workers: int = 8):
     """Run ``func`` over ``items`` on a thread pool, preserving input order.
 
-    Returns a list aligned with ``items``; entries are ``None`` where ``func``
-    raised. A failure in one item never affects the others.
+    Returns a list aligned with ``items``. Entries are normally the result of
+    ``func``; where ``func`` raised, the entry is the *exception object*, so the
+    caller can inspect ``isinstance`` to learn why. A failure in one item never
+    affects the others.
     """
     items = list(items)
     if not items:
@@ -46,8 +48,14 @@ def parallel_map(func, items, max_workers: int = 8):
 
 
 def _safe_call(func, item):
+    """Run ``func(item)``; on failure return the exception object itself.
+
+    Returning the exception rather than None lets the caller tell WHY it failed
+    -- "no source can serve this symbol" (structural) and "network error"
+    (transient) need different handling and different reporting.
+    """
     try:
         return func(item)
     except Exception as exc:  # noqa: BLE001 - isolate every failure
         log.debug("item failed: %s", exc)
-        return None
+        return exc

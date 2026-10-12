@@ -151,6 +151,7 @@ class InstrumentSettings:
 
     timeframe: str = "1m"
     range_: str = "7d"
+    data_source: str = "router"    # router | yahoo | binance | alpaca
     asset_classes: list[str] = field(
         default_factory=lambda: ["index", "forex", "crypto"])
     symbols: list[str] = field(default_factory=list)   # empty = use the class defaults

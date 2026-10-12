@@ -566,6 +566,10 @@
         <div class="panel-head"><h2>Instruments &amp; Timeframe</h2></div>
         <div class="setup-grid">
           <label class="field">
+            <span class="field-label">Data source</span>
+            <select id="f-data-source" class="select"></select>
+          </label>
+          <label class="field">
             <span class="field-label">Timeframe</span>
             <select id="f-timeframe" class="select">
               <option value="1m">1 minute</option>
@@ -626,6 +630,7 @@
             </div>
           </div>
         </div>
+        <div class="broker-note" id="data-source-note"></div>
         <div class="setup-actions">
           <button class="btn btn-primary" id="btn-save-instruments">Save instruments</button>
           <button class="btn btn-ghost" id="btn-fill-defaults">Use class defaults</button>

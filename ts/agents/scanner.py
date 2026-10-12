@@ -53,6 +53,8 @@ class ScannerAgent(Agent):
         # I/O-bound fetches, so more workers than cores helps; capped so a
         # 50-symbol universe cannot open 50 sockets at once.
         self.max_workers = max(1, min(int(max_workers), 12))
+        # symbols no configured source can serve; reported, not fatal
+        self.unavailable: list[str] = []
         self.report = ScanReport()
 
     def run(self) -> None:
@@ -63,6 +65,7 @@ class ScannerAgent(Agent):
         # Results are then re-ordered to match the configured universe so the
         # published sequence -- and therefore every downstream consumer -- stays
         # deterministic.
+        from ..altdata import DataSourceError
         from ..parallel import parallel_map
 
         snapshots = parallel_map(self.feed.fetch, self.symbols,
@@ -72,8 +75,18 @@ class ScannerAgent(Agent):
         fresh: list[str] = []
         stale: list[str] = []
         failed: list[str] = []
+        uncovered: list[str] = []
 
         for symbol, snap in zip(self.symbols, snapshots):
+            if isinstance(snap, DataSourceError):
+                # structural: no source can serve this symbol/timeframe
+                uncovered.append(symbol)
+                continue
+            if isinstance(snap, Exception):
+                # transient: network, throttling, bad ticker
+                failed.append(symbol)
+                self.alarm(f"fetch failed for {symbol}: {snap}")
+                continue
             if snap is None:
                 failed.append(symbol)
                 self.alarm(f"fetch failed for {symbol}")
@@ -88,6 +101,7 @@ class ScannerAgent(Agent):
                 fresh.append(symbol)
                 self.publish(Topic.MARKET_DATA, {**summary, "tradable": True})
 
+        self.unavailable = uncovered
         self.report = ScanReport(
             at=_dt.datetime.now(_dt.UTC).isoformat(),
             scanned=scanned, fresh=fresh, stale=stale, failed=failed,

@@ -87,6 +87,7 @@ class BinanceKlines:
     """Public Binance spot klines. No API key required."""
 
     name = "binance_public"
+    display = "Binance (public klines)"
 
     def history(self, symbol: str, interval: str = "1m", range_: str = "7d",
                 limit: int = 1000, **kwargs) -> pd.DataFrame:
@@ -95,9 +96,11 @@ class BinanceKlines:
             raise DataSourceError(f"Binance has no {interval!r} bars")
 
         pair = self._normalise(symbol)
+        # NOTE: passing BOTH startTime and limit returns the oldest `limit` bars
+        # after startTime -- not the most recent -- which made a 7d range look
+        # 6 days stale. Use limit alone to get the newest bars, which is what a
+        # trading system actually wants.
         params = {"symbol": pair, "interval": binance_interval, "limit": int(limit)}
-        if start_ms := self._start_ms(range_):
-            params["startTime"] = start_ms
         url = f"{BINANCE_REST}/api/v3/klines?{urllib.parse.urlencode(params)}"
         payload = _http_json(url)
         if not isinstance(payload, list) or not payload:
@@ -148,6 +151,7 @@ class AlpacaMarketData:
     """Alpaca market data: crypto is public, equities need a free key."""
 
     name = "alpaca_data"
+    display = "Alpaca market data"
 
     def __init__(self, key: str = "", secret: str = "") -> None:
         self.key = key

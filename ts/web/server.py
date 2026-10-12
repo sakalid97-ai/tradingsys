@@ -80,6 +80,20 @@ def _catalogue():
     return registry.catalogue()
 
 
+def _data_sources():
+    """The available data sources and what each one covers."""
+    from ..feedrouter import SOURCE_NOTES
+
+    return [
+        {"id": key, "label": label, **note} for key, label in [
+            ("router", "Auto (recommended)"),
+            ("binance", "Binance public"),
+            ("alpaca", "Alpaca market data"),
+            ("yahoo", "Yahoo Finance"),
+        ] for note in [dict(zip(("note",), (SOURCE_NOTES.get(key, ""),)))]
+    ]
+
+
 def _propfirm_registry():
     from ..propfirm import registry
 
@@ -203,6 +217,8 @@ class DashboardServer:
             return self._broker_test(body)
         if path == "/api/instruments":
             return 200, self._instruments()
+        if path == "/api/data-sources":
+            return 200, {"sources": _data_sources()}
         if path == "/api/command/list":
             return 200, {"commands": self._console().catalogue()}
         if path == "/api/command/run" and method == "POST":

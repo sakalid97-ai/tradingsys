@@ -36,6 +36,7 @@ class MarketSnapshot:
     frame: pd.DataFrame
     fetched_at: datetime
     source: str = "yahoo"
+    tradable: bool = True
 
     @property
     def last_bar_time(self) -> pd.Timestamp:
@@ -57,6 +58,11 @@ class MarketSnapshot:
     @property
     def age_seconds(self) -> float:
         return (datetime.now(UTC) - self.last_bar_time.to_pydatetime()).total_seconds()
+
+    @property
+    def source_name(self) -> str:
+        """Which source produced this snapshot, if known."""
+        return getattr(self, 'source', 'yahoo')
 
     @property
     def freshness_limit_seconds(self) -> float:
@@ -126,7 +132,8 @@ class MarketFeed:
         if bars and len(frame) > bars:
             frame = frame.tail(bars)
         snap = MarketSnapshot(symbol=symbol, instrument=instrument, frame=frame,
-                              fetched_at=datetime.now(UTC))
+                              fetched_at=datetime.now(UTC),
+                              source=getattr(self._feed, "name", "yahoo"))
         self._snapshots[symbol] = snap
         return snap
 
