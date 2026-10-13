@@ -74,6 +74,24 @@ def _trade_from_payload(payload: dict):
     )
 
 
+# How long a snapshot may go unwritten before the engine is presumed dead.
+# Cycles are minutes apart, so this is deliberately generous.
+STALE_ENGINE_SECONDS = 900.0
+
+
+def _snapshot_age_seconds(iso: str | None):
+    """Age of a snapshot's updated_at, or None if unparseable/absent."""
+    if not iso:
+        return None
+    try:
+        stamp = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=UTC)
+    return max(0.0, (datetime.now(UTC) - stamp).total_seconds())
+
+
 def _catalogue():
     from ..broker import registry
 
@@ -265,10 +283,10 @@ class DashboardServer:
         engine = self.ctx.engine
         if engine is None:
             engine = self.ctx.agents or self._live_engine
-        # "Running" means the worker thread is alive, NOT that it has finished a
-        # cycle. `cycles` is only incremented at the END of a cycle, and the
-        # first one spends 5-20s fetching the universe -- so keying the status
-        # on it reported STOPPED while the engine was mid-flight.
+        # "Running" means the worker is alive, NOT that it finished a cycle.
+        # `cycles`/`ticks` is incremented at the END of a cycle, and the first
+        # one spends 5-20s fetching the universe -- so keying the status on it
+        # reported STOPPED while the engine was mid-flight.
         agents = self.ctx.agents
         thread = getattr(agents, "_thread", None)
         supervisor_alive = bool(thread is not None and thread.is_alive())
@@ -281,6 +299,25 @@ class DashboardServer:
             if supervisor_alive and not getattr(agents, "cycles", 0):
                 # alive but mid-first-cycle: say so rather than implying IDLE
                 mode = mode + " (starting)"
+
+        # --- VPS path: no in-process engine, so read the state file
+        if engine is None and agents is None:
+            snapshot = self.ctx.state.read_snapshot() or {}
+            snap_mode = str(snapshot.get("mode") or "")
+            if snap_mode:
+                # infer liveness from freshness: a state file that stopped being
+                # written means the engine is gone, whatever the file claims
+                updated = snapshot.get("updated_at")
+                age = _snapshot_age_seconds(updated)
+                running = age is not None and age <= STALE_ENGINE_SECONDS
+                if snap_mode == "AGENTS-DRYRUN":
+                    mode = "AGENTS-DRYRUN"
+                elif snap_mode == "AGENTS-LIVE":
+                    mode = "AGENTS-LIVE"
+                else:
+                    mode = snap_mode
+                if not running:
+                    mode = "STOPPED (stale state)"
         return {
             "ok": True,
             "version": self.ctx.version,
@@ -301,6 +338,8 @@ class DashboardServer:
             for r in self.ctx.state.read_equity(3000)
             if "t" in r
         ]
+        # the headless engine writes "ticks"; the dashboard reads "cycles"
+        snap["cycles"] = snap.get("cycles", snap.get("ticks"))
         snap["equity_series"] = series
 
         # A dry-run agent cycle records no broker equity, which would leave the
