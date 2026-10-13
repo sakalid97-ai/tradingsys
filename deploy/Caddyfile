@@ -1,12 +1,34 @@
 # Reverse proxy for the trading dashboard.
 #
-# Basic auth covers the whole UI: an unauthenticated trading console on the
-# public internet would let anyone place orders. Replace the hostname and the
-# credentials (read from .env by systemd, or set them literally below).
-
+# An unauthenticated trading console on the public internet would let anyone
+# place orders -- so this gates the whole UI behind Basic auth and terminates
+# TLS for you.
+#
+# Setup:
+#   1. replace trading.example.com with your domain
+#   2. generate a bcrypt hash of your dashboard password:
+#        caddy hash-password --plaintext "your-long-password"
+#   3. put the hash in the basicauth line below
+#   4. sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+#   5. sudo caddy validate --config /etc/caddy/Caddyfile
+#   6. sudo systemctl reload caddy
+#
+# No domain? An SSH tunnel is safer than exposing the port:
+#   ssh -L 8642:127.0.0.1:8642 user@your-server
+#   then open http://127.0.0.1:8642 locally
 trading.example.com {
     basicauth /* {
-        {$DASHBOARD_USER} {$DASHBOARD_BCRYPT}
+        trader "$2a$14$REPLACE_WITH_YOUR_BCRYPT_HASH"
     }
+    encode zstd gzip
     reverse_proxy 127.0.0.1:8642
+
+    # Server-Sent Events must never be buffered, or the live 1s refresh
+    # degrades into the old 4s poll.
+    @sse path /api/stream
+    handle @sse {
+        reverse_proxy 127.0.0.1:8642 {
+            flush_interval -1
+        }
+    }
 }

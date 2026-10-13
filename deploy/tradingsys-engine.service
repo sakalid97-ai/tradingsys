@@ -1,5 +1,5 @@
 [Unit]
-Description=Autonomous Trading System - multi-agent engine (dry run)
+Description=Autonomous Trading System - headless engine (dry run)
 After=network-online.target
 Wants=network-online.target
 
@@ -8,14 +8,21 @@ Type=simple
 User=__SERVICE_USER__
 WorkingDirectory=__APP_DIR__
 EnvironmentFile=-__APP_DIR__/.env
-# --interval 1m --range 7d: intraday. The engine is dry-run by default and
-# submits nothing.
-ExecStart=__APP_DIR__/.venv/bin/python run.py agents --cycle-seconds 60 --interval 1m --range 7d
+# `serve` is the headless loop: it owns the trading engine, writes state to disk
+# that the dashboard reads, and runs the Telegram channel in-process. It runs
+# whether or not anyone has the browser open -- the previous `agents` command
+# only ran inside the dashboard process, which meant closing a browser tab
+# stopped a live trading system.
+#
+# Dry-run by default. Nothing is submitted until a venue is connected in the
+# dashboard AND Setup -> Risk -> "Dry run" is turned off.
+ExecStart=__APP_DIR__/.venv/bin/python run.py serve --cycle-seconds 300 --interval 1m --range 7d
 Restart=always
 RestartSec=15
 StandardOutput=journal
 StandardError=journal
 
+# --- hardening: the engine only needs to write its own state and data cache
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
